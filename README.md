@@ -4,7 +4,7 @@
 [https://calender-view-component.vercel.app/]
 
 ## Storybook URL
-[https://690062c5df116b8358c532ca-zysxxpqjrg.chromatic.com/?path=/story/components-calendarview--default&globals=viewport:responsive]
+[https://690062c5df116b8358c532ca-kdhrqmarwe.chromatic.com/?path=/story/components-calendarview--interactive-demo&globals=viewport:responsive]
 
 ## 📦 Installation
 
