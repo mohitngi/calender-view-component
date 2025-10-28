@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { CalendarView } from './CalendarView';
 import { CalendarEvent } from './CalendarView.types';
@@ -10,8 +10,9 @@ const getTodayWithTime = (hours: number, minutes: number) => {
   return date;
 };
 
-// Key for localStorage
+// Keys for localStorage
 const USER_EVENTS_KEY = 'storybook_user_created_events';
+const MODIFIED_EVENTS_KEY = 'storybook_modified_events';
 
 // Sample events for stories (matching the app's events exactly)
 const getInitialSampleEvents = (): CalendarEvent[] => [
@@ -118,41 +119,128 @@ export default meta;
 type Story = StoryObj<typeof CalendarView>;
 
 
+// Helper to load modified events from localStorage
+const loadModifiedEvents = (): Record<string, CalendarEvent> => {
+  try {
+    const saved = localStorage.getItem(MODIFIED_EVENTS_KEY);
+    if (!saved) return {};
+    
+    const parsed = JSON.parse(saved);
+    const result: Record<string, CalendarEvent> = {};
+    
+    Object.entries(parsed).forEach(([key, value]: [string, any]) => {
+      result[key] = {
+        ...value,
+        startDate: new Date(value.startDate),
+        endDate: new Date(value.endDate)
+      };
+    });
+    
+    return result;
+  } catch (error) {
+    console.error('Failed to load modified events', error);
+    return {};
+  }
+};
+
+// Helper to save modified events to localStorage
+const saveModifiedEvents = (events: Record<string, CalendarEvent>) => {
+  try {
+    const toSave: Record<string, any> = {};
+    Object.entries(events).forEach(([key, event]) => {
+      toSave[key] = {
+        ...event,
+        startDate: event.startDate.toISOString(),
+        endDate: event.endDate.toISOString()
+      };
+    });
+    localStorage.setItem(MODIFIED_EVENTS_KEY, JSON.stringify(toSave));
+  } catch (error) {
+    console.error('Failed to save modified events', error);
+  }
+};
+
 // Stateful wrapper component that mimics the app's event handling
 const CalendarWithState = (args: any) => {
-  // Load user events from localStorage on initial render
+  // Load events from localStorage on initial render
   const [userEvents, setUserEvents] = useState<CalendarEvent[]>(() => loadUserEvents());
   const [sampleEvents] = useState<CalendarEvent[]>(() => getInitialSampleEvents());
+  const [modifiedEvents, setModifiedEvents] = useState<Record<string, CalendarEvent>>(() => loadModifiedEvents());
   
-  // Combine sample events and user-created events
-  const allEvents = [...sampleEvents, ...userEvents];
+  // Combine sample events (with modifications) and user-created events
+  const allEvents = [
+    ...sampleEvents.map(event => ({
+      ...(modifiedEvents[event.id] || event)
+    })).filter(event => {
+      // Filter out deleted events (marked with endDate of 0)
+      const modifiedEvent = modifiedEvents[event.id];
+      return !modifiedEvent || modifiedEvent.endDate.getTime() !== 0;
+    }),
+    ...userEvents
+  ];
+
+  // Save events to localStorage whenever they change
+  useEffect(() => {
+    saveUserEvents(userEvents);
+  }, [userEvents]);
+
+  // Save modified events to localStorage whenever they change
+  useEffect(() => {
+    saveModifiedEvents(modifiedEvents);
+  }, [modifiedEvents]);
 
   // Handle adding a new event
   const handleEventAdd = (event: CalendarEvent) => {
-    const newEvent = {
-      ...event,
-      id: `user-${Date.now()}`,
-      isUserCreated: true
-    };
-    const updatedEvents = [...userEvents, newEvent];
-    setUserEvents(updatedEvents);
-    saveUserEvents(updatedEvents);
+    if (sampleEvents.some(e => e.id === event.id)) {
+      // Update modified sample event
+      setModifiedEvents(prev => ({
+        ...prev,
+        [event.id]: event
+      }));
+    } else {
+      // Add new user-created event
+      const newEvent = {
+        ...event,
+        id: `user-${Date.now()}`
+      };
+      setUserEvents(prev => [...prev, newEvent]);
+    }
   };
 
   // Handle updating an event
   const handleEventUpdate = (id: string, updates: Partial<CalendarEvent>) => {
-    const updatedEvents = userEvents.map(event => 
-      event.id === id ? { ...event, ...updates } : event
-    );
-    setUserEvents(updatedEvents);
-    saveUserEvents(updatedEvents);
+    if (sampleEvents.some(e => e.id === id)) {
+      // Update modified sample event
+      setModifiedEvents(prev => ({
+        ...prev,
+        [id]: {
+          ...(prev[id] || sampleEvents.find(e => e.id === id)!),
+          ...updates
+        }
+      }));
+    } else {
+      // Update user-created event
+      setUserEvents(prev => 
+        prev.map(event => event.id === id ? { ...event, ...updates } : event)
+      );
+    }
   };
 
   // Handle deleting an event
   const handleEventDelete = (id: string) => {
-    const updatedEvents = userEvents.filter(event => event.id !== id);
-    setUserEvents(updatedEvents);
-    saveUserEvents(updatedEvents);
+    if (sampleEvents.some(e => e.id === id)) {
+      // For sample events, mark as deleted
+      setModifiedEvents(prev => ({
+        ...prev,
+        [id]: {
+          ...(prev[id] || sampleEvents.find(e => e.id === id)!),
+          endDate: new Date(0) // Mark as deleted
+        }
+      }));
+    } else {
+      // Delete user-created event
+      setUserEvents(prev => prev.filter(event => event.id !== id));
+    }
   };
 
   // Return the calendar view with event handlers
@@ -175,7 +263,7 @@ export const Default: Story = {
   render: (args) => <CalendarWithState {...args} />,
   args: {
     initialView: 'month',
-    initialDate: new Date(),
+    initialDate: new Date(1759683319393),
   },
   parameters: {
     docs: {
@@ -310,36 +398,82 @@ const InteractiveDemoWrapper = (args: any) => {
   const [showInstructions, setShowInstructions] = useState(true);
   const [userEvents, setUserEvents] = useState<CalendarEvent[]>(() => loadUserEvents());
   const [sampleEvents] = useState<CalendarEvent[]>(() => getInitialSampleEvents());
+  const [modifiedEvents, setModifiedEvents] = useState<Record<string, CalendarEvent>>(() => loadModifiedEvents());
   
-  // Combine sample events and user-created events
-  const allEvents = [...sampleEvents, ...userEvents];
+  // Combine sample events (with modifications) and user-created events
+  const allEvents = [
+    ...sampleEvents.map(event => ({
+      ...(modifiedEvents[event.id] || event)
+    })).filter(event => {
+      // Filter out deleted events (marked with endDate of 0)
+      const modifiedEvent = modifiedEvents[event.id];
+      return !modifiedEvent || modifiedEvent.endDate.getTime() !== 0;
+    }),
+    ...userEvents
+  ];
+
+  // Save events to localStorage whenever they change
+  useEffect(() => {
+    saveUserEvents(userEvents);
+  }, [userEvents]);
+
+  // Save modified events to localStorage whenever they change
+  useEffect(() => {
+    saveModifiedEvents(modifiedEvents);
+  }, [modifiedEvents]);
 
   // Handle adding a new event
   const handleEventAdd = (event: CalendarEvent) => {
-    const newEvent = {
-      ...event,
-      id: `user-${Date.now()}`,
-      isUserCreated: true
-    };
-    const updatedEvents = [...userEvents, newEvent];
-    setUserEvents(updatedEvents);
-    saveUserEvents(updatedEvents);
+    if (sampleEvents.some(e => e.id === event.id)) {
+      // Update modified sample event
+      setModifiedEvents(prev => ({
+        ...prev,
+        [event.id]: event
+      }));
+    } else {
+      // Add new user-created event
+      const newEvent = {
+        ...event,
+        id: `user-${Date.now()}`
+      };
+      setUserEvents(prev => [...prev, newEvent]);
+    }
   };
 
   // Handle updating an event
   const handleEventUpdate = (id: string, updates: Partial<CalendarEvent>) => {
-    const updatedEvents = userEvents.map(event => 
-      event.id === id ? { ...event, ...updates } : event
-    );
-    setUserEvents(updatedEvents);
-    saveUserEvents(updatedEvents);
+    if (sampleEvents.some(e => e.id === id)) {
+      // Update modified sample event
+      setModifiedEvents(prev => ({
+        ...prev,
+        [id]: {
+          ...(prev[id] || sampleEvents.find(e => e.id === id)!),
+          ...updates
+        }
+      }));
+    } else {
+      // Update user-created event
+      setUserEvents(prev => 
+        prev.map(event => event.id === id ? { ...event, ...updates } : event)
+      );
+    }
   };
 
   // Handle deleting an event
   const handleEventDelete = (id: string) => {
-    const updatedEvents = userEvents.filter(event => event.id !== id);
-    setUserEvents(updatedEvents);
-    saveUserEvents(updatedEvents);
+    if (sampleEvents.some(e => e.id === id)) {
+      // For sample events, mark as deleted
+      setModifiedEvents(prev => ({
+        ...prev,
+        [id]: {
+          ...(prev[id] || sampleEvents.find(e => e.id === id)!),
+          endDate: new Date(0) // Mark as deleted
+        }
+      }));
+    } else {
+      // Delete user-created event
+      setUserEvents(prev => prev.filter(event => event.id !== id));
+    }
   };
   
   return (
@@ -380,7 +514,7 @@ const InteractiveDemoWrapper = (args: any) => {
             <li>📅 <strong>Click on a date</strong> to create a new event</li>
             <li>✏️ <strong>Click on an event</strong> to view or edit its details</li>
             <li>🗑️ <strong>Delete events</strong> using the delete button in the event modal</li>
-            <li>🔄 <strong>Drag and drop</strong> events to reschedule them</li>
+            <li>🔄 <strong>Update events</strong> using the update button in the event modal</li>
           </ul>
           <div style={{
             display: 'flex',
@@ -483,8 +617,165 @@ export const MobileView: Story = {
   },
 };
 
+const AccessibilityWrapper = (args: any) => {
+  const [showInstructions, setShowInstructions] = useState(true);
+  const [userEvents, setUserEvents] = useState<CalendarEvent[]>(() => loadUserEvents());
+  const [sampleEvents] = useState<CalendarEvent[]>(() => getInitialSampleEvents());
+  const [modifiedEvents, setModifiedEvents] = useState<Record<string, CalendarEvent>>(() => loadModifiedEvents());
+  
+  // Combine sample events (with modifications) and user-created events
+  const allEvents = [
+    ...sampleEvents.map(event => ({
+      ...(modifiedEvents[event.id] || event)
+    })).filter(event => {
+      // Filter out deleted events (marked with endDate of 0)
+      const modifiedEvent = modifiedEvents[event.id];
+      return !modifiedEvent || modifiedEvent.endDate.getTime() !== 0;
+    }),
+    ...userEvents
+  ];
+
+  // Save events to localStorage whenever they change
+  useEffect(() => {
+    saveUserEvents(userEvents);
+  }, [userEvents]);
+
+  // Save modified events to localStorage whenever they change
+  useEffect(() => {
+    saveModifiedEvents(modifiedEvents);
+  }, [modifiedEvents]);
+
+  // Handle adding a new event
+  const handleEventAdd = (event: CalendarEvent) => {
+    if (sampleEvents.some(e => e.id === event.id)) {
+      // Update modified sample event
+      setModifiedEvents(prev => ({
+        ...prev,
+        [event.id]: event
+      }));
+    } else {
+      // Add new user-created event
+      const newEvent = {
+        ...event,
+        id: `user-${Date.now()}`
+      };
+      setUserEvents(prev => [...prev, newEvent]);
+    }
+  };
+
+  // Handle updating an event
+  const handleEventUpdate = (id: string, updates: Partial<CalendarEvent>) => {
+    if (sampleEvents.some(e => e.id === id)) {
+      // Update modified sample event
+      setModifiedEvents(prev => ({
+        ...prev,
+        [id]: {
+          ...(prev[id] || sampleEvents.find(e => e.id === id)!),
+          ...updates
+        }
+      }));
+    } else {
+      // Update user-created event
+      setUserEvents(prev => 
+        prev.map(event => event.id === id ? { ...event, ...updates } : event)
+      );
+    }
+  };
+
+  // Handle deleting an event
+  const handleEventDelete = (id: string) => {
+    if (sampleEvents.some(e => e.id === id)) {
+      // For sample events, mark as deleted
+      setModifiedEvents(prev => ({
+        ...prev,
+        [id]: {
+          ...(prev[id] || sampleEvents.find(e => e.id === id)!),
+          endDate: new Date(0) // Mark as deleted
+        }
+      }));
+    } else {
+      // Delete user-created event
+      setUserEvents(prev => prev.filter(event => event.id !== id));
+    }
+  };
+  
+  return (
+    <div style={{ position: 'relative', height: '100vh' }}>
+      {showInstructions && (
+        <div style={{
+          position: 'absolute',
+          top: '1rem',
+          left: '1rem',
+          right: '1rem',
+          background: '#f8fafc',
+          border: '1px solid #e2e8f0',
+          borderRadius: '0.5rem',
+          padding: '1rem',
+          zIndex: 10,
+          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+          maxWidth: '600px',
+          margin: '0 auto'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <h3 style={{ margin: 0 }}>♿ Accessibility Features</h3>
+            <button 
+              onClick={() => setShowInstructions(false)}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '1.25rem',
+                color: '#64748b'
+              }}
+              aria-label="Close accessibility instructions"
+            >
+              ×
+            </button>
+          </div>
+          <p style={{ margin: '0.5rem 0' }}>This calendar includes the following accessibility features:</p>
+          <ul style={{ margin: '0.5rem 0', paddingLeft: '1.25rem' }}>
+            <li>🔤 <strong>Keyboard Navigation</strong>: Use Tab, Enter, and arrow keys to navigate</li>
+            <li>🎯 <strong>Focus Management</strong>: Clear visual focus indicators for keyboard users</li>
+            <li>📱 <strong>Screen Reader Support</strong>: ARIA attributes for screen reader compatibility</li>
+            <li>🎨 <strong>Color Contrast</strong>: Meets WCAG AA contrast ratio requirements</li>
+          </ul>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            marginTop: '0.75rem',
+          }}>
+            <button 
+              onClick={() => setShowInstructions(false)}
+              style={{
+                padding: '0.25rem 0.75rem',
+                background: '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '0.25rem',
+                cursor: 'pointer',
+                fontSize: '0.875rem'
+              }}
+            >
+              Got it!
+            </button>
+          </div>
+        </div>
+      )}
+      <div style={{ paddingTop: showInstructions ? '240px' : '1rem' }}>
+        <CalendarView
+          {...args}
+          events={allEvents}
+          onEventAdd={handleEventAdd}
+          onEventUpdate={handleEventUpdate}
+          onEventDelete={handleEventDelete}
+        />
+      </div>
+    </div>
+  );
+};
+
 export const Accessibility: Story = {
-  render: (args) => <CalendarWithState {...args} />,
+  render: (args) => <AccessibilityWrapper {...args} />,
   args: {
     initialView: 'month',
     initialDate: new Date(),
@@ -492,7 +783,24 @@ export const Accessibility: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Demonstrates keyboard navigation and ARIA accessibility features. Use Tab, Enter, and arrow keys to navigate.',
+        story: `## ♿ Accessible Calendar Demo
+
+This calendar includes comprehensive accessibility features:
+
+- **Keyboard Navigation**: Full keyboard support for all interactive elements
+- **Screen Reader Support**: ARIA attributes and proper semantic HTML
+- **Focus Management**: Clear visual focus indicators
+- **Color Contrast**: Meets WCAG 2.1 AA contrast requirements
+- **Zoom Support**: Fully functional at 200% zoom
+
+### Keyboard Shortcuts:
+- **Tab**: Navigate between interactive elements
+- **Enter/Space**: Activate buttons and controls
+- **Arrow Keys**: Navigate between dates
+- **Page Up/Down**: Move between months
+- **Home/End**: Jump to start/end of week
+
+Try navigating the calendar using only your keyboard!`,
       },
     },
   },

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { EventModalProps, EVENT_COLORS, EVENT_CATEGORIES } from '@/components/Calendar/CalendarView.types';
 import { Modal } from '@/components/primitives/Modal';
 import { Button } from '@/components/primitives/Button';
@@ -27,34 +27,50 @@ export const EventModal: React.FC<EventModalProps> = React.memo(({
     category: 'Meeting',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const titleInputRef = useRef<HTMLInputElement>(null);
   
   const isEditing = !!event;
   
+  // Reset form when modal opens/closes or when switching between events
   useEffect(() => {
-    if (isOpen) {
-      if (event) {
-        setFormData({
-          title: event.title,
-          description: event.description || '',
-          startDate: event.startDate,
-          endDate: event.endDate,
-          color: event.color || '#3b82f6',
-          category: event.category || 'Meeting',
-        });
-      } else if (selectedDate) {
-        const startDate = new Date(selectedDate);
-        startDate.setHours(9, 0, 0, 0);
-        const endDate = new Date(startDate);
-        endDate.setHours(10, 0, 0, 0);
-        
-        setFormData(prev => ({
-          ...prev,
-          startDate,
-          endDate,
-        }));
-      }
-      setErrors({});
+    if (!isOpen) return;
+
+    // Focus the title input when the modal opens
+    const focusTimer = setTimeout(() => {
+      titleInputRef.current?.focus();
+    }, 0);
+    
+    if (event) {
+      // Editing existing event
+      setFormData({
+        title: event.title,
+        description: event.description || '',
+        startDate: event.startDate,
+        endDate: event.endDate,
+        color: event.color || '#3b82f6',
+        category: event.category || 'Meeting',
+      });
+    } else {
+      // Creating new event - reset form data
+      const startDate = selectedDate ? new Date(selectedDate) : new Date();
+      const endDate = new Date(startDate);
+      endDate.setHours(startDate.getHours() + 1);
+      
+      setFormData({
+        title: '',
+        description: '',
+        startDate,
+        endDate,
+        color: '#3b82f6',
+        category: 'Meeting',
+      });
     }
+    
+    setErrors({});
+    
+    return () => {
+      clearTimeout(focusTimer);
+    };
   }, [isOpen, event, selectedDate]);
   
   const validateForm = useCallback(() => {
@@ -87,8 +103,9 @@ export const EventModal: React.FC<EventModalProps> = React.memo(({
   }, [formData]);
   
   
+  // Handle event deletion
   const handleDelete = useCallback(() => {
-    if (event && onDelete) {
+    if (event?.id && onDelete) {
       onDelete(event.id);
       onClose();
     }
@@ -124,7 +141,8 @@ export const EventModal: React.FC<EventModalProps> = React.memo(({
     }
   }, [errors]);
   
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback((e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!validateForm()) return;
     
     const eventData = {
@@ -136,14 +154,25 @@ export const EventModal: React.FC<EventModalProps> = React.memo(({
     onClose();
   }, [formData, event?.id, validateForm, onSave, onClose]);
   
+  // Handle keyboard navigation
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Handle Enter key press (but not when in a textarea or when Shift+Enter is pressed)
+    if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement) && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleSubmit(e as any);
+    }
+  }, [handleSubmit]);
+
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={isEditing ? 'Edit Event' : 'Create Event'}
+      title={event ? 'Edit Event' : 'Create Event'}
       size="md"
     >
-      <div className="space-y-4 sm:space-y-6">
+      <div className="space-y-4 sm:space-y-6" onKeyDown={handleKeyDown}>
         {/* Title */}
         <div>
           <label htmlFor="title" className="block text-sm font-medium text-neutral-700 mb-1.5">
@@ -152,6 +181,7 @@ export const EventModal: React.FC<EventModalProps> = React.memo(({
           <input
             type="text"
             id="title"
+            ref={titleInputRef}
             className={clsx(
               'w-full px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base',
               'h-12',
@@ -160,6 +190,7 @@ export const EventModal: React.FC<EventModalProps> = React.memo(({
             value={formData.title}
             onChange={(e) => handleChange('title', e.target.value)}
             placeholder="Event title"
+            autoFocus
           />
           {errors.title && <p className="mt-1.5 text-sm text-red-600">{errors.title}</p>}
         </div>

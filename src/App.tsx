@@ -134,11 +134,15 @@ function App() {
     }
   }, [userCreatedEvents, userModifiedEvents]);
 
-  // Get the most recent version of each event (modified > sample)
+  // Get the most recent version of each event (modified > sample) and filter out deleted events
   const allEvents = [
     ...initialEvents.map(event => ({
       ...(userModifiedEvents[event.id] || event)
-    })),
+    })).filter(event => {
+      // Filter out deleted events (marked with endDate of 0)
+      const modifiedEvent = userModifiedEvents[event.id];
+      return !modifiedEvent || modifiedEvent.endDate.getTime() !== 0;
+    }),
     ...userCreatedEvents
   ];
 
@@ -177,9 +181,14 @@ function App() {
 
   const handleEventDelete = (id: string) => {
     if (initialEvents.some(e => e.id === id)) {
-      // For sample events, reset to original by removing from modified
-      const { [id]: _, ...rest } = userModifiedEvents;
-      setUserModifiedEvents(rest);
+      // For sample events, mark as deleted
+      setUserModifiedEvents(prev => ({
+        ...prev,
+        [id]: {
+          ...(prev[id] || initialEvents.find(e => e.id === id)!),
+          endDate: new Date(0) // Mark as deleted
+        }
+      }));
     } else {
       // Delete user-created event
       setUserCreatedEvents(prev => prev.filter(event => event.id !== id));

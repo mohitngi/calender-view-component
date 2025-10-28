@@ -1,14 +1,39 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, forwardRef } from 'react';
 import { ModalProps } from '@/components/Calendar/CalendarView.types';
 import { clsx } from 'clsx';
 
-export const Modal: React.FC<ModalProps> = ({
+// Extend ModalProps to include form-related props
+interface ExtendedModalProps extends Omit<ModalProps, 'onSubmit' | 'onKeyDown'> {
+  as?: React.ElementType;
+  onSubmit?: (e: React.FormEvent) => void;
+  onKeyDown?: (e: React.KeyboardEvent) => void;
+  noValidate?: boolean;
+  [key: string]: any; // Allow any other props
+}
+
+// Create a polymorphic component that can render as any HTML element or React component
+type PolymorphicComponentProps<T extends React.ElementType> = {
+  as?: T;
+  children: React.ReactNode;
+} & Omit<React.ComponentPropsWithoutRef<T>, 'as'>;
+
+const PolymorphicComponent = <T extends React.ElementType = 'div'>({
+  as: Component = 'div' as T,
+  ...props
+}: PolymorphicComponentProps<T>) => {
+  const ComponentAs = Component as React.ElementType;
+  return <ComponentAs {...props} />;
+};
+
+export const Modal = forwardRef<HTMLDivElement, ExtendedModalProps>(({
   isOpen,
   onClose,
   title,
   children,
   size = 'md',
-}) => {
+  as: Component = 'div' as React.ElementType,
+  ...rest
+}, ref) => {
   const modalRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
@@ -37,7 +62,7 @@ export const Modal: React.FC<ModalProps> = ({
   
   if (!isOpen) return null;
   
-  const sizeClasses = {
+  const sizeClasses: Record<string, string> = {
     sm: 'max-w-md',
     md: 'max-w-lg',
     lg: 'max-w-2xl',
@@ -58,15 +83,17 @@ export const Modal: React.FC<ModalProps> = ({
       />
       
       {/* Modal */}
-      <div
-        ref={modalRef}
+      <PolymorphicComponent
+        as={Component}
+        ref={ref}
         className={clsx(
           'relative w-full max-h-[90vh] my-4 mx-0 md:mx-4 rounded-none md:rounded-xl bg-white shadow-modal animate-slide-up',
           'flex flex-col',
-          sizeClasses[size],
+          sizeClasses[size as keyof typeof sizeClasses],
           'overflow-hidden' // Ensure content doesn't overflow the modal
         )}
         tabIndex={-1}
+        {...rest}
       >
         {/* Header - Sticky on mobile */}
         <div className="flex-shrink-0 flex items-center justify-between p-4 md:p-6 border-b border-neutral-200 sticky top-0 bg-white z-10">
@@ -74,6 +101,7 @@ export const Modal: React.FC<ModalProps> = ({
             {title}
           </h2>
           <button
+            type="button"
             onClick={onClose}
             className="text-neutral-400 hover:text-neutral-600 transition-colors focus-ring rounded-lg p-1 -mr-2"
             aria-label="Close modal"
@@ -98,7 +126,9 @@ export const Modal: React.FC<ModalProps> = ({
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
           {children}
         </div>
-      </div>
+      </PolymorphicComponent>
     </div>
   );
-};
+});
+
+Modal.displayName = 'Modal';
