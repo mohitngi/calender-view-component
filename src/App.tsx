@@ -41,8 +41,8 @@ const initialEvents: CalendarEvent[] = [
     id: 'evt-4',
     title: 'Development Sprint',
     description: 'Sprint planning and task assignment',
-    startDate: new Date(2025, 9, 30, 9, 0),  // October 30, 2025, 9:00 AM
-    endDate: new Date(2025, 9, 30, 17, 0),  // October 30, 2025, 5:00 PM
+    startDate: new Date(new Date().setDate(new Date().getDate() + 2)),
+    endDate: new Date(new Date().setDate(new Date().getDate() + 2.33)), // ~9am to 5pm
     color: '#8b5cf6',
     category: 'Work',
   },

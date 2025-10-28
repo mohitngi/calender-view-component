@@ -53,21 +53,6 @@ const getInitialSampleEvents = (): CalendarEvent[] => [
   },
 ];
 
-// Helper to parse events from localStorage with proper date handling
-const parseEvents = (json: string): CalendarEvent[] => {
-  try {
-    return JSON.parse(json, (key, value) => {
-      if (key === 'startDate' || key === 'endDate') {
-        return new Date(value);
-      }
-      return value;
-    });
-  } catch (error) {
-    console.error('Error parsing events:', error);
-    return [];
-  }
-};
-
 // Helper to safely stringify events with date handling
 const stringifyEvents = (data: any): string => {
   return JSON.stringify(data, (_, value) => {
@@ -142,44 +127,24 @@ const meta: Meta<typeof CalendarView> = {
 export default meta;
 type Story = StoryObj<typeof CalendarView>;
 
+// Clear any existing Storybook localStorage data to ensure a clean state
+const clearStorybookStorage = () => {
+  localStorage.removeItem(USER_EVENTS_KEY);
+  localStorage.removeItem(MODIFIED_EVENTS_KEY);
+};
+
 // Stateful wrapper component that mimics the app's event handling
 const CalendarWithState = (args: any) => {
+  // Clear storage on initial load
+  useEffect(() => {
+    clearStorybookStorage();
+  }, []);
+
   // User-created events (not in sample events)
-  const [userCreatedEvents, setUserCreatedEvents] = useState<CalendarEvent[]>(() => {
-    try {
-      const saved = localStorage.getItem(USER_EVENTS_KEY);
-      return saved ? parseEvents(saved) : [];
-    } catch (error) {
-      console.error('Failed to load user events', error);
-      return [];
-    }
-  });
+  const [userCreatedEvents, setUserCreatedEvents] = useState<CalendarEvent[]>([]);
 
   // User-modified sample events
-  const [userModifiedEvents, setUserModifiedEvents] = useState<Record<string, Partial<CalendarEvent>>>(() => {
-    try {
-      const saved = localStorage.getItem(MODIFIED_EVENTS_KEY);
-      if (!saved) return {};
-      
-      const parsed = JSON.parse(saved);
-      const result: Record<string, Partial<CalendarEvent>> = {};
-      
-      for (const [id, event] of Object.entries(parsed)) {
-        if (event && typeof event === 'object') {
-          const typedEvent = event as any;
-          result[id] = {
-            ...typedEvent,
-            startDate: typedEvent.startDate ? new Date(typedEvent.startDate) : undefined,
-            endDate: typedEvent.endDate ? new Date(typedEvent.endDate) : undefined
-          };
-        }
-      }
-      return result;
-    } catch (error) {
-      console.error('Failed to load modified events', error);
-      return {};
-    }
-  });
+  const [userModifiedEvents, setUserModifiedEvents] = useState<Record<string, Partial<CalendarEvent>>>({});
 
   // Get current sample events with any modifications
   const getCurrentSampleEvents = (): CalendarEvent[] => {
