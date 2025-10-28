@@ -1,13 +1,17 @@
 # Calendar View Component
 
-## 🚀 Live Storybook
-[Deploy to Vercel/Netlify and add your deployed Storybook URL here]
+## App URL
+[https://calender-view-component.vercel.app/]
+
+## Storybook URL
+[https://690062c5df116b8358c532ca-flevjqnfiv.chromatic.com/?path=/story/components-calendarview--default&globals=viewport:responsive]
 
 ## 📦 Installation
 
 ```bash
 pnpm install
-pnpm run storybook
+pnpm dev
+pnpm storybook
 ```
 
 ## 🏗️ Architecture
@@ -41,7 +45,6 @@ This calendar component is built with a modular architecture focusing on:
 5. **Interactive Demo** - Fully functional event management
 6. **Mobile View** - Responsive layout demonstration
 7. **Accessibility** - Keyboard navigation demonstration
-8. **Dark Mode** - Dark theme support (bonus feature)
 
 ## 🛠️ Technologies
 
@@ -104,10 +107,10 @@ src/
 
 1. Clone the repository
 2. Install dependencies: `pnpm install`
-3. Start development server: `pnpm run dev`
-4. View Storybook: `pnpm run storybook`
+3. Start development server: `pnpm dev`
+4. View Storybook: `pnpm storybook`
 5. Run tests: `pnpm test`
-6. Build for production: `pnpm run build`
+6. Build for production: `pnpm build`
 
 ## 🧪 Testing
 
@@ -116,22 +119,6 @@ The project includes comprehensive unit tests using Vitest and React Testing Lib
 ```bash
 pnpm test
 ```
-
-## 📦 Deployment
-
-### Deploy to Vercel
-
-1. Connect your GitHub repository to Vercel
-2. Set build command: `pnpm run build-storybook`
-3. Set output directory: `storybook-static`
-4. Deploy!
-
-### Deploy to Netlify
-
-1. Connect your GitHub repository to Netlify
-2. Set build command: `pnpm run build-storybook`
-3. Set publish directory: `storybook-static`
-4. Deploy!
 
 ## 📝 Development Notes
 
@@ -151,14 +138,3 @@ The component follows modern SaaS design principles:
 - Subtle micro-animations
 - Purposeful color usage
 
-## 📧 Contact
-
-Built as part of the Design System Component Library hiring challenge.
-
-## 🏆 Bonus Features Implemented
-
-- **Unit Tests**: Comprehensive test coverage with Vitest
-- **Dark Mode**: Theme switching capability
-- **Performance Optimization**: Advanced memoization and optimization techniques
-- **Enhanced Accessibility**: Beyond basic requirements with full keyboard navigation
-- **Responsive Design**: Mobile-first approach with tablet and desktop optimizations
