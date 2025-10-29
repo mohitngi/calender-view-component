@@ -34,9 +34,25 @@ export const WeekView: React.FC<WeekViewProps> = React.memo(({
   const getEventsForDay = useCallback((dayIndex: number) => {
     const day = weekDays[dayIndex];
     if (!day) return [];
-    return weekEvents.filter(event => 
-      event.startDate.toDateString() === day.toDateString()
-    );
+    
+    const startOfDay = new Date(day);
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date(day);
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    return weekEvents.filter(event => {
+      // Event starts on this day
+      if (event.startDate.toDateString() === day.toDateString()) return true;
+      // Event ends on this day
+      if (event.endDate.toDateString() === day.toDateString()) return true;
+      // Event spans across this day
+      if (event.startDate <= startOfDay && event.endDate >= endOfDay) return true;
+      // Event is in progress on this day
+      if (event.startDate <= endOfDay && event.endDate >= startOfDay) return true;
+      
+      return false;
+    });
   }, [weekDays, weekEvents]);
   
   const getEventsForTimeSlot = useCallback((timeSlot: Date, dayIndex: number) => {

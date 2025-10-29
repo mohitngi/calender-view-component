@@ -46,34 +46,112 @@ const getInitialSampleEvents = (): CalendarEvent[] => [
     id: 'evt-4',
     title: 'Development Sprint',
     description: 'Sprint planning and task assignment',
-    startDate: new Date(new Date().setDate(new Date().getDate() + 2)),
-    endDate: new Date(new Date().setDate(new Date().getDate() + 2.33)), // ~9am to 5pm
+    startDate: (() => {
+      const date = new Date();
+      // Set to 2 days from now at 9:00 AM
+      date.setDate(date.getDate() + 2);
+      date.setHours(9, 0, 0, 0);
+      return date;
+    })(),
+    endDate: (() => {
+      const date = new Date();
+      // Set to 2 days from now at 5:00 PM
+      date.setDate(date.getDate() + 2);
+      date.setHours(17, 0, 0, 0);
+      return date;
+    })(),
     color: '#8b5cf6',
     category: 'Work',
   },
 ];
 
 
-// Many events for stress testing
-const getManyEvents = (): CalendarEvent[] => 
-  Array.from({ length: 25 }, (_, i) => {
-    const baseDate = new Date();
+// Generate consistent 32 events for the month with at least one event today
+const getManyEvents = (): CalendarEvent[] => {
+  const events: CalendarEvent[] = [];
+  const categories = ['Meeting', 'Work', 'Personal', 'Health', 'Education'];
+  const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+  
+  // Fixed base date (first day of current month)
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const baseDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  
+  // Seeded random number generator for consistent results
+  const seededRandom = (seed: number) => {
+    const x = Math.sin(seed) * 10000;
+    return x - Math.floor(x);
+  };
+  
+  // Always add an event for today
+  const todayEventTime = new Date(today);
+  todayEventTime.setHours(14, 0, 0, 0); // 2 PM
+  
+  events.push({
+    id: 'evt-today',
+    title: 'Today\'s Event',
+    description: 'This event is scheduled for today',
+    startDate: todayEventTime,
+    endDate: new Date(todayEventTime.getTime() + 60 * 60 * 1000), // 1 hour duration
+    color: '#3b82f6',
+    category: 'Meeting'
+  });
+  
+  // Generate remaining 31 events
+  for (let i = 0; i < 31; i++) {
+    // Use the event index as part of the seed for consistent results
+    const seed = i * 1000 + now.getMonth();
+    
+    // Distribute events across the month (0-30 days from start of month)
+    const dayOffset = Math.floor(seededRandom(seed) * 28);
     const startDate = new Date(baseDate);
-    startDate.setDate(baseDate.getDate() + Math.floor(i / 5));
+    startDate.setDate(baseDate.getDate() + dayOffset);
     
-    const endDate = new Date(startDate);
-    endDate.setHours(startDate.getHours() + 1);
+    // Skip today as we already added a specific event for it
+    if (startDate.toDateString() === today.toDateString()) {
+      continue;
+    }
     
-    return {
-      id: `evt-many-${i}`,
-      title: `Event ${i + 1}`,
-      description: `This is event number ${i + 1}`,
+    // Fixed time slots (9am, 12pm, 3pm, 6pm) for consistency
+    const timeSlots = [9, 12, 15, 18];
+    const timeSlot = timeSlots[i % timeSlots.length]!; // Non-null assertion as we know index is valid
+    startDate.setHours(timeSlot, 0, 0, 0);
+    
+    // Fixed duration (1, 1.5, or 2 hours) - ensure it's always defined
+    const durationOptions = [1, 1.5, 2];
+    const durationHours = durationOptions[i % durationOptions.length]!; // Non-null assertion as we know index is valid
+    const endDate = new Date(startDate.getTime() + durationHours * 60 * 60 * 1000);
+    
+    // Consistent category and color based on event index
+    const categoryIndex = i % categories.length;
+    const color = colors[categoryIndex]!; // Non-null assertion as we know index is valid
+    const category = categories[categoryIndex]!; // Non-null assertion as we know index is valid
+    
+    // Create event titles that indicate their position in the sequence
+    const eventNumber = i + 1;
+    const timeStr = startDate.toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit',
+      hour12: true 
+    });
+    
+    // Create the event with all required properties
+    const event: CalendarEvent = {
+      id: `evt-${i}`,
+      title: `Event ${eventNumber}`,
+      description: `Scheduled on ${startDate.toLocaleDateString()} at ${timeStr}`,
       startDate,
       endDate,
-      color: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][i % 5] as string,
-      category: ['Meeting', 'Work', 'Personal', 'Health', 'Education'][i % 5] as string,
+      color,
+      category,
+      // Add any other required properties from CalendarEvent type here
     };
-  });
+    
+    events.push(event);
+  }
+  
+  return events;
+};
 
 const meta: Meta<typeof CalendarView> = {
   title: 'Components/CalendarView',
@@ -326,20 +404,58 @@ export const WeekView: Story = {
 };
 
 const WithManyEventsComponent = (args: any) => {
-  const [events, setEvents] = useState<CalendarEvent[]>(getManyEvents());
+  const STORAGE_KEY = 'calendar-many-events';
+  
+  // Load events from localStorage or generate new ones
+  const loadEvents = (): CalendarEvent[] => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Convert string dates back to Date objects
+        return parsed.map((event: any) => ({
+          ...event,
+          startDate: new Date(event.startDate),
+          endDate: new Date(event.endDate)
+        }));
+      }
+    } catch (e) {
+      console.warn('Failed to load events from localStorage', e);
+    }
+    // Generate new events if none saved
+    return getManyEvents();
+  };
+  
+  // Save events to localStorage
+  const saveEvents = (events: CalendarEvent[]) => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+    } catch (e) {
+      console.warn('Failed to save events to localStorage', e);
+    }
+  };
+  
+  const [events, setEvents] = useState<CalendarEvent[]>(() => loadEvents());
   
   const handleEventAdd = (event: CalendarEvent) => {
-    setEvents(prev => [...prev, { ...event, id: `evt-${Date.now()}` }]);
+    const newEvent = { ...event, id: `evt-${Date.now()}` };
+    const newEvents = [...events, newEvent];
+    setEvents(newEvents);
+    saveEvents(newEvents);
   };
 
   const handleEventUpdate = (id: string, updates: Partial<CalendarEvent>) => {
-    setEvents(prev => 
-      prev.map(event => event.id === id ? { ...event, ...updates } : event)
+    const newEvents = events.map(event => 
+      event.id === id ? { ...event, ...updates } : event
     );
+    setEvents(newEvents);
+    saveEvents(newEvents);
   };
 
   const handleEventDelete = (id: string) => {
-    setEvents(prev => prev.filter(event => event.id !== id));
+    const newEvents = events.filter(event => event.id !== id);
+    setEvents(newEvents);
+    saveEvents(newEvents);
   };
 
   return (
@@ -364,7 +480,7 @@ export const WithManyEvents: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Calendar with many events to test performance and event overflow handling.',
+        story: 'Calendar with many events to test performance and event overflow handling. Events are persisted in localStorage.',
       },
     },
   },
@@ -734,9 +850,8 @@ const AccessibilityWrapper = (args: any) => {
           </div>
           <p style={{ margin: '0.5rem 0' }}>This calendar includes the following accessibility features:</p>
           <ul style={{ margin: '0.5rem 0', paddingLeft: '1.25rem' }}>
-            <li>🔤 <strong>Keyboard Navigation</strong>: Use Tab, Enter, and arrow keys to navigate</li>
+            <li>🔤 <strong>Keyboard Navigation</strong>: Use Tab, Enter, and Esc key to navigate</li>
             <li>🎯 <strong>Focus Management</strong>: Clear visual focus indicators for keyboard users</li>
-            <li>📱 <strong>Screen Reader Support</strong>: ARIA attributes for screen reader compatibility</li>
             <li>🎨 <strong>Color Contrast</strong>: Meets WCAG AA contrast ratio requirements</li>
           </ul>
           <div style={{
@@ -788,7 +903,6 @@ export const Accessibility: Story = {
 This calendar includes comprehensive accessibility features:
 
 - **Keyboard Navigation**: Full keyboard support for all interactive elements
-- **Screen Reader Support**: ARIA attributes and proper semantic HTML
 - **Focus Management**: Clear visual focus indicators
 - **Color Contrast**: Meets WCAG 2.1 AA contrast requirements
 - **Zoom Support**: Fully functional at 200% zoom
